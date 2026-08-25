@@ -3,6 +3,12 @@ use std::path::PathBuf;
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+
+    if env::var("DOCS_RS").is_ok() {
+        generate_bindings(&manifest_dir);
+        return;
+    }
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let target = env::var("TARGET").unwrap();
     // let profile = env::var("PROFILE").unwrap();

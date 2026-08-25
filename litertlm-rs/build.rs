@@ -14,6 +14,10 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 fn main() {
+    if env::var("DOCS_RS").is_ok() {
+        return;
+    }
+
     let lib_dir = PathBuf::from(
         env::var("DEP_LITERT_LM_LIB_DIR")
             .expect("litertlm-sys did not report DEP_LITERT_LM_LIB_DIR -- is it a dependency?"),
