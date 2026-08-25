@@ -11,42 +11,64 @@ fn main() {
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let target = env::var("TARGET").unwrap();
-    // let profile = env::var("PROFILE").unwrap();
+    let profile = env::var("PROFILE").unwrap();
 
-    // Determine the library file name, subdirectory, and download URL based on target
-    let (lib_filename, subdir, url) = match target.as_str() {
-        "aarch64-unknown-linux-gnu" | "aarch64-linux-gnu" => (
-            "liblitert-lm.so",
-            "lib/linux_arm64",
-            "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/linux_arm64_liblitert-lm.so",
-        ),
-        "x86_64-linux-gnu" | "x86_64-unknown-linux-gnu" => (
-            "liblitert-lm.so",
-            "lib/linux_x86_64",
-            "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/linux_x86_64_liblitert-lm.so",
-        ),
-        "aarch64-linux-android" => (
-            "liblitert-lm.so",
-            "lib/android_arm64",
-            "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/android_arm64_liblitert-lm.so",
-        ),
-        "x86_64-linux-android" => (
-            "liblitert-lm.so",
-            "lib/android_x86_64",
-            "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/android_x86_64_liblitert-lm.so",
-        ),
-        "aarch64-apple-darwin" => (
-            "liblitert-lm.dylib",
-            "lib/macos_arm64",
-            "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/liblitert-lm.dylib",
-        ),
-        "x86_64-pc-windows-msvc" => (
-            "litert-lm.dll",
-            "lib/windows_x86_64/bin",
-            "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/windows_x86_64_litert-lm.dll",
-        ),
-        _ => panic!("Unsupported target: {}", target),
-    };
+    println!("cargo:warning=Building litertlm-sys for target: {}", target);
+    println!("cargo:warning=Profile: {}", profile);
+
+    // Determine the library file name, subdirectory, download URL, and (for
+    // Windows only) the extra `.lib` import library MSVC's linker needs
+    // alongside the `.dll` -- the DLL alone is enough at runtime, but the
+    // linker needs the import lib present at compile time to resolve
+    // `litert_lm_*` symbols against.
+    let (lib_filename, subdir, url, extra_lib): (&str, &str, &str, Option<(&str, &str)>) =
+        match target.as_str() {
+            "aarch64-unknown-linux-gnu" | "aarch64-linux-gnu" => (
+                "liblitert-lm.so",
+                "lib/linux_arm64",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/linux_arm64_liblitert-lm.so",
+                None,
+            ),
+            "x86_64-linux-gnu" | "x86_64-unknown-linux-gnu" => (
+                "liblitert-lm.so",
+                "lib/linux_x86_64",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/linux_x86_64_liblitert-lm.so",
+                None,
+            ),
+            "aarch64-linux-android" => (
+                "liblitert-lm.so",
+                "lib/android_arm64",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/android_arm64_liblitert-lm.so",
+                None,
+            ),
+            "x86_64-linux-android" => (
+                "liblitert-lm.so",
+                "lib/android_x86_64",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/android_x86_64_liblitert-lm.so",
+                None,
+            ),
+            "aarch64-apple-darwin" => (
+                "liblitert-lm.dylib",
+                "lib/macos_arm64",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/liblitert-lm.dylib",
+                None,
+            ),
+            "x86_64-apple-darwin" => panic!(
+                "litert-lm has no macOS x86_64 (Intel) prebuilt upstream -- only \
+                 aarch64-apple-darwin is published. You'll need to build LiteRT-LM \
+                 from source for Intel Macs: https://github.com/google-ai-edge/LiteRT-LM"
+            ),
+            "x86_64-pc-windows-msvc" => (
+                "litert-lm.dll",
+                "lib/windows_x86_64/bin",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/windows_x86_64_litert-lm.dll",
+                Some((
+                    "litert-lm.lib",
+                    "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/windows_x86_64_litert-lm.lib",
+                )),
+            ),
+            _ => panic!("Unsupported target: {}", target),
+        };
 
     // Create subdirectory structure in OUT_DIR
     let lib_subdir = out_dir.join(subdir);
@@ -54,6 +76,7 @@ fn main() {
         .unwrap_or_else(|e| panic!("Failed to create directory {:?}: {}", lib_subdir, e));
 
     let lib_path = lib_subdir.join(lib_filename);
+    let extra_lib_path = extra_lib.map(|(filename, _)| lib_subdir.join(filename));
 
     // Priority 1: Check LITERT_LM_LIB_DIR environment variable
     if let Ok(env_lib_dir) = env::var("LITERT_LM_LIB_DIR") {
@@ -74,6 +97,15 @@ fn main() {
                     env_lib_path, lib_path, e
                 )
             });
+            if let (Some((extra_filename, _)), Some(extra_dest)) = (extra_lib, &extra_lib_path) {
+                let env_extra_path = PathBuf::from(&env_lib_dir).join(subdir).join(extra_filename);
+                std::fs::copy(&env_extra_path, extra_dest).unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to copy {:?} to {:?}: {} (expected alongside {} in LITERT_LM_LIB_DIR)",
+                        env_extra_path, extra_dest, e, lib_filename
+                    )
+                });
+            }
             configure_linking(&lib_subdir, lib_filename);
             generate_bindings(&manifest_dir);
             return;
@@ -99,6 +131,15 @@ fn main() {
         std::fs::copy(&prebuilt_lib_path, &lib_path).unwrap_or_else(|e| {
             panic!("Failed to copy library: {}", e)
         });
+        if let (Some((extra_filename, _)), Some(extra_dest)) = (extra_lib, &extra_lib_path) {
+            let prebuilt_extra_path = manifest_dir.join("prebuilt").join(subdir).join(extra_filename);
+            std::fs::copy(&prebuilt_extra_path, extra_dest).unwrap_or_else(|e| {
+                panic!(
+                    "Failed to copy {:?}: {} (expected alongside {} in prebuilt/{})",
+                    prebuilt_extra_path, e, lib_filename, subdir
+                )
+            });
+        }
         configure_linking(&lib_subdir, lib_filename);
         generate_bindings(&manifest_dir);
         return;
@@ -109,6 +150,9 @@ fn main() {
         "cargo:warning=No prebuilt library found, downloading from GitHub"
     );
     download_file(url, &lib_path);
+    if let (Some((_, extra_url)), Some(extra_dest)) = (extra_lib, &extra_lib_path) {
+        download_file(extra_url, extra_dest);
+    }
 
     configure_linking(&lib_subdir, lib_filename);
     generate_bindings(&manifest_dir);
