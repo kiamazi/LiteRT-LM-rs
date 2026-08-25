@@ -1,0 +1,14 @@
+# This was needed for the OLD locally-built libengine.so, whose
+# symbol-version table rust-lld (the default linker on this target)
+# rejected with "corrupt input file: version definition index 0 ... is out
+# of bounds". GNU ld/gold don't have this problem, so this forces the
+# classic BFD linker.
+#
+# Now that the project links against Google's official liblitert-lm.so
+# prebuilt instead, this specific issue no longer apply -- that
+# prebuilt could plausibly have been built with a cleaner version script
+# that doesn't trigger the lld bug.
+# I Kept it in place as a known-safe fallback.
+#
+# [target.x86_64-unknown-linux-gnu]
+# rustflags = ["-C", "link-arg=-fuse-ld=bfd"]

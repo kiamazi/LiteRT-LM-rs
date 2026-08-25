@@ -1,0 +1,31 @@
+[package]
+name = "litertlm-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+authors.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
+# Matches the actual library name now: Google's official C API prebuilt
+# ships `liblitert-lm.so` / `.dylib`, or `litert-lm.dll` + `litert-lm.lib`
+# on Windows -- (see prebuilt/README.md in this crate).
+links = "litert-lm"
+build = "build.rs"
+description = "Raw FFI bindings to LiteRT-LM C API"
+
+include = [
+    "src/",
+    "build.rs",
+    "Cargo.toml",
+    "README.md",
+    "wrapper.h",
+    "prebuilt/**/*",
+]
+
+[build-dependencies]
+bindgen = "0.70"
+reqwest = { version = "0.13.4", features = ["blocking"] }
