@@ -51,6 +51,21 @@ sudo dnf install clang-devel
 brew install llvm
 ```
 
+`litertlm-sys` will download the needed C API prebuilt library
+automatically. If you'd rather supply your own downloaded copy instead,
+Download the official C API prebuilt package for your platform from
+[LiteRT-LM's GitHub releases](https://github.com/google-ai-edge/LiteRT-LM/releases)
+(v0.16.0 or later — look for the C API prebuilt asset, not the source
+tarball)
+Extract it into `your/project/root/prebuilt/`
+Add these lines to your project's `.cargo/config.toml` so `litertlm-sys`
+knows where to find it:
+
+```toml
+[env]
+LITERT_LM_LIB_DIR = { value = "prebuilt", relative = true }
+```
+
 For the full setup walkthrough — including how to point at a prebuilt
 library you downloaded yourself instead of letting it auto-download, and
 the details of how runtime linking is wired up — see the
