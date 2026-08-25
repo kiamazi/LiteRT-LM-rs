@@ -80,11 +80,36 @@ project used to require.)
    cargo run --example interactive -- /path/to/model.litertlm
    ```
 
+## Cross-compiling to Windows
+
+The official LiteRT-LM Windows prebuilt only ships an MSVC-format
+import library (`litert-lm.lib`), so this crate only supports the
+**MSVC** target — `x86_64-pc-windows-gnu` (MinGW) isn't supported,
+since GNU `ld` can't link against an MSVC-format `.lib` directly.
+
+**On Windows:** just use the MSVC target, which is the default toolchain
+most Windows Rust installs already have:
+
+```bash
+rustup target add x86_64-pc-windows-msvc
+cargo build --target x86_64-pc-windows-msvc
+```
+
+**Cross-compiling from Linux or macOS:** use [`cargo-xwin`](https://github.com/rust-cross/cargo-xwin),
+which downloads a minimal Windows SDK/CRT so you can target MSVC
+without a real Windows machine:
+
+```bash
+cargo install cargo-xwin
+rustup target add x86_64-pc-windows-msvc
+cargo xwin build --target x86_64-pc-windows-msvc
+```
+
 ## Runtime linking
 
 `litertlm-sys/build.rs` locates (or downloads) the native library and tells
 cargo where it is, but `rustc-link-arg` — which is what embeds the rpath —
-only applies to build targets in the *same package* as the script that
+only applies to build targets in the _same package_ as the script that
 emits it, and `litertlm-sys` doesn't build any binaries itself. So
 `litertlm-sys` instead passes the library's location to `litertlm-rs`'s
 build script via Cargo's `links` metadata mechanism

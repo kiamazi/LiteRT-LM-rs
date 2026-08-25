@@ -67,6 +67,13 @@ fn main() {
                     "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/windows_x86_64_litert-lm.lib",
                 )),
             ),
+            "x86_64-pc-windows-gnu" => panic!(
+                "litert-lm's Windows prebuilt only ships an MSVC-format import \
+                 library (.lib), which GNU ld / MinGW can't link against directly. \
+                 Use the MSVC target instead: `rustup target add x86_64-pc-windows-msvc`. \
+                 Cross-compiling from Linux/macOS? Use cargo-xwin: \
+                 `cargo install cargo-xwin && cargo xwin build --target x86_64-pc-windows-msvc`"
+            ),
             _ => panic!("Unsupported target: {}", target),
         };
 
