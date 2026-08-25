@@ -15,7 +15,7 @@ homepage      = "https://github.com/kiamazi/LiteRT-LM-rs"
 documentation = "https://docs.rs/litertlm-rs"
 authors       = ["LiteRT-rs Contributors"]
 readme        = "README.md"
-keywords      = ["litert", "litert-lm", "tflite", "tensorflow", "ml", "inference"]
+keywords      = ["litert", "litert-lm", "tflite", "ml", "inference"]
 categories    = ["api-bindings", "science"]
 
 [workspace.dependencies]
