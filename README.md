@@ -67,6 +67,12 @@ project used to require.)
    LITERT_LM_LIB_DIR = { value = "prebuilt", relative = true }
    ```
 
+   or
+
+   ```sh
+   LITERT_LM_LIB_DIR="path/to/prebuilt/" cargo build
+   ```
+
 5. Build:
 
    ```bash
@@ -75,9 +81,10 @@ project used to require.)
 
 6. Run an example (needs a real model file):
    ```bash
-   cargo run --example basic -- /path/to/model.litertlm
-   cargo run --example streaming -- /path/to/model.litertlm
-   cargo run --example interactive -- /path/to/model.litertlm
+   cargo run --example basic -- /path/to/model.litertlm [gpu/cpu]
+   cargo run --example streaming -- /path/to/model.litertlm [gpu/cpu]
+   cargo run --example interactive -- /path/to/model.litertlm cpu
+   cargo run --example interactive -- /path/to/model.litertlm gpu
    ```
 
 ## Cross-compiling to Windows
