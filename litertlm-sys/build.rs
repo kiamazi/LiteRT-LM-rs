@@ -1,5 +1,8 @@
 use std::env;
 use std::path::PathBuf;
+use std::path::Path;
+use std::fs;
+use sha2::{Sha256, Digest};
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -16,41 +19,46 @@ fn main() {
     println!("cargo:warning=Building litertlm-sys for target: {}", target);
     println!("cargo:warning=Profile: {}", profile);
 
-    // Determine the library file name, subdirectory, download URL, and (for
+    // Determine the library file name, subdirectory, download URL, checksum, and (for
     // Windows only) the extra `.lib` import library MSVC's linker needs
     // alongside the `.dll` -- the DLL alone is enough at runtime, but the
     // linker needs the import lib present at compile time to resolve
     // `litert_lm_*` symbols against.
-    let (lib_filename, subdir, url, extra_lib): (&str, &str, &str, Option<(&str, &str)>) =
+    let (lib_filename, subdir, url, expected_checksum, extra_lib): (&str, &str, &str, &str, Option<(&str, &str, &str)>) =
         match target.as_str() {
             "aarch64-unknown-linux-gnu" | "aarch64-linux-gnu" => (
                 "liblitert-lm.so",
                 "lib/linux_arm64",
                 "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/linux_arm64_liblitert-lm.so",
+                "1c48e5d711069544156cd8aad61cec561262248f344cbe4ba72d8640efb4f34c",
                 None,
             ),
             "x86_64-linux-gnu" | "x86_64-unknown-linux-gnu" => (
                 "liblitert-lm.so",
                 "lib/linux_x86_64",
                 "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/linux_x86_64_liblitert-lm.so",
+                "34eb4998b1b3a8b049a6fb24c8069933821abb22680f4737b7f29baae233ae35",
                 None,
             ),
             "aarch64-linux-android" => (
                 "liblitert-lm.so",
                 "lib/android_arm64",
                 "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/android_arm64_liblitert-lm.so",
+                "e9cbdddb0f1c693c549e1cde40bf90ad8aaa124d15944d0dd18faaf016dd6938",
                 None,
             ),
             "x86_64-linux-android" => (
                 "liblitert-lm.so",
                 "lib/android_x86_64",
                 "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/android_x86_64_liblitert-lm.so",
+                "b2976e7d57040617c541c04104cde0fa40f10bea9787fe0d21f949a97a926dff",
                 None,
             ),
             "aarch64-apple-darwin" => (
                 "liblitert-lm.dylib",
                 "lib/macos_arm64",
                 "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/liblitert-lm.dylib",
+                "626a0b40a28405529d2e43ab058b4deac967cb8517cd0c37c103baa3517bee13",
                 None,
             ),
             "x86_64-apple-darwin" => panic!(
@@ -62,9 +70,11 @@ fn main() {
                 "litert-lm.dll",
                 "lib/windows_x86_64/bin",
                 "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/windows_x86_64_litert-lm.dll",
+                "4bb6bc031c5ee1588b504cb6c588b7369a99c1f4874745549abb6d4a9cb153c4",
                 Some((
                     "litert-lm.lib",
                     "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/windows_x86_64_litert-lm.lib",
+                    "e630a50dc9923fa03f103a34ebd7eab13ac0479b29c1b8a99bc2f9afac089103",
                 )),
             ),
             "x86_64-pc-windows-gnu" => panic!(
@@ -83,7 +93,7 @@ fn main() {
         .unwrap_or_else(|e| panic!("Failed to create directory {:?}: {}", lib_subdir, e));
 
     let lib_path = lib_subdir.join(lib_filename);
-    let extra_lib_path = extra_lib.map(|(filename, _)| lib_subdir.join(filename));
+    let extra_lib_path = extra_lib.map(|(filename, _, _)| lib_subdir.join(filename));
 
     // Priority 1: Check LITERT_LM_LIB_DIR environment variable
     if let Ok(env_lib_dir) = env::var("LITERT_LM_LIB_DIR") {
@@ -104,7 +114,7 @@ fn main() {
                     env_lib_path, lib_path, e
                 )
             });
-            if let (Some((extra_filename, _)), Some(extra_dest)) = (extra_lib, &extra_lib_path) {
+            if let (Some((extra_filename, _, _)), Some(extra_dest)) = (extra_lib, &extra_lib_path) {
                 let env_extra_path = PathBuf::from(&env_lib_dir).join(subdir).join(extra_filename);
                 std::fs::copy(&env_extra_path, extra_dest).unwrap_or_else(|e| {
                     panic!(
@@ -138,7 +148,7 @@ fn main() {
         std::fs::copy(&prebuilt_lib_path, &lib_path).unwrap_or_else(|e| {
             panic!("Failed to copy library: {}", e)
         });
-        if let (Some((extra_filename, _)), Some(extra_dest)) = (extra_lib, &extra_lib_path) {
+        if let (Some((extra_filename, _, _)), Some(extra_dest)) = (extra_lib, &extra_lib_path) {
             let prebuilt_extra_path = manifest_dir.join("prebuilt").join(subdir).join(extra_filename);
             std::fs::copy(&prebuilt_extra_path, extra_dest).unwrap_or_else(|e| {
                 panic!(
@@ -157,8 +167,15 @@ fn main() {
         "cargo:warning=No prebuilt library found, downloading from GitHub"
     );
     download_file(url, &lib_path);
-    if let (Some((_, extra_url)), Some(extra_dest)) = (extra_lib, &extra_lib_path) {
-        download_file(extra_url, extra_dest);
+    verify_checksum(&lib_path, expected_checksum)
+        .unwrap_or_else(|e| panic!("Checksum verification failed for library: {}", e));
+
+    if let Some((_, extra_url, extra_checksum)) = extra_lib {
+        if let Some(extra_dest) = &extra_lib_path {
+            download_file(extra_url, extra_dest);
+            verify_checksum(extra_dest, extra_checksum)
+                .unwrap_or_else(|e| panic!("Checksum verification failed for extra library: {}", e));
+        }
     }
 
     configure_linking(&lib_subdir, lib_filename);
@@ -233,4 +250,28 @@ fn download_file(url: &str, destination: &PathBuf) {
         url,
         bytes.len()
     );
+}
+
+/// Compute the SHA-256 hash of a file.
+fn compute_sha256(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher)?;
+    let hash_bytes = hasher.finalize();
+    Ok(format!("{:x}", hash_bytes))
+}
+
+/// Verify that a file's SHA-256 hash matches the expected value.
+fn verify_checksum(path: &Path, expected: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let actual = compute_sha256(path)?;
+    if actual != expected {
+        return Err(format!(
+            "Checksum mismatch for {}\n  Expected: {}\n  Actual:   {}",
+            path.display(),
+            expected,
+            actual
+        ).into());
+    }
+    println!("cargo:warning=Checksum verified for {}", path.display());
+    Ok(())
 }
