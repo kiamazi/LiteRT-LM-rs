@@ -27,7 +27,8 @@ project used to require.)
    brew install llvm
    ```
 2. `litertlm-sys` will download the needed C API prebuilt library
-   automatically. If you'd rather supply your own downloaded copy instead,
+   automatically (from an independent prebuilt mirror to avoid wasteful
+   bulk downloads). If you'd rather supply your own downloaded copy instead,
    go to step 3.
 
 3. **Download the official C API prebuilt package** for your platform from

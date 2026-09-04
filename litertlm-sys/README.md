@@ -19,7 +19,16 @@ on Windows) in this order:
 2. A `prebuilt/<platform>/` directory next to this crate's `Cargo.toml`
    (used for local development of this repo).
 3. Otherwise, downloads the matching prebuilt for your target from
-   [LiteRT-LM's GitHub releases](https://github.com/google-ai-edge/LiteRT-LM/releases).
+   [LiteRT-LM-prebuilts](https://github.com/kiamazi/LiteRT-LM-prebuilts/releases)
+   (an independent mirror of
+   [LiteRT-LM's GitHub releases](https://github.com/google-ai-edge/LiteRT-LM/releases)).
+
+> [!NOTE]
+> Google publishes a single `.zip` per LiteRT-LM release containing shared
+> libraries for _every_ supported platform. Downloading and unzipping that
+> entire archive just to extract the one `.so`/`.dylib`/`.dll` your build
+> actually needs is wasteful — especially in a `build.rs` script that runs
+> on every `cargo build` or CI job.
 
 It then runs `bindgen` over `wrapper.h` (which just includes `conversation.h`
 and `engine.h`) to generate the raw bindings, allow-listing the
