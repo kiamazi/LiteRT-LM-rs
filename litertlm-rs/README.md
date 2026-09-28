@@ -953,7 +953,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - [`examples/streaming.rs`](examples/streaming.rs) — Streaming output
 - [`examples/interactive.rs`](examples/interactive.rs) — Interactive chat REPL with thinking
 - [`examples/sandbox_tools.rs`](examples/sandbox_tools.rs) — Tool calling with sandboxed file access
-- [`examples/complex.rs`](more_configs/more_.rs) — configuration with thinking, sampler, and constraints
+- [`examples/complex.rs`](examples/more_configs.rs) — configuration with thinking, sampler, and constraints
 
 ---
 
