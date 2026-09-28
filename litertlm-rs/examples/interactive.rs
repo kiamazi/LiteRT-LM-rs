@@ -18,9 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Molde: {}", stem.display());
     }
 
-    let backend = std::env::args()
-        .nth(2)
-        .unwrap_or("cpu".into());
+    let backend = std::env::args().nth(2).unwrap_or("cpu".into());
 
     println!("backend: {backend}");
 
