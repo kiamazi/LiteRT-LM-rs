@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(2)
         .unwrap_or("cpu".into());
 
-    set_min_log_level(LogSeverity::Silent);
+    set_min_log_level(LogSeverity::Silent)?;
 
     let mut settings = EngineSettings::new(&model_path, &backend, None, None)?;
     settings.set_num_threads(4);

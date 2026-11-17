@@ -1,7 +1,8 @@
 # litertlm-sys
 
 Raw, unsafe `bindgen`-generated FFI bindings to Google's [LiteRT LM](https://github.com/google-ai-edge/LiteRT-LM)
-C API (`conversation.h` + `engine.h`).
+C API **1.0.0** (`engine.h`, `conversation.h`, `embedding_engine.h`,
+`model_info.h`, `experimental.h`, `error_reporter.h`, `api_export.h`).
 
 This crate is a thin `-sys` layer: every function is `unsafe`, pointer-based,
 and a 1:1 mirror of the C API. **Most users want
@@ -15,8 +16,10 @@ or you're writing your own abstraction.
 `build.rs` gets a copy of `liblitert-lm.so` (`.dylib` on macOS, `litert-lm.dll`
 on Windows) in this order:
 
-1. `LITERT_LM_LIB_DIR` environment variable, if set.
-2. A `prebuilt/<platform>/` directory next to this crate's `Cargo.toml`
+1. `LITERT_LM_LIB_DIR` environment variable, if set. It must point at the
+   *package root* of the official prebuilt, i.e. the directory that contains
+   `lib/<platform>/liblitert-lm.so` (not the platform directory itself).
+2. A `prebuilt/lib/<platform>/` directory next to this crate's `Cargo.toml`
    (used for local development of this repo).
 3. Otherwise, downloads the matching prebuilt for your target from
    [LiteRT-LM-prebuilts](https://github.com/kiamazi/LiteRT-LM-prebuilts/releases)
@@ -30,9 +33,16 @@ on Windows) in this order:
 > actually needs is wasteful — especially in a `build.rs` script that runs
 > on every `cargo build` or CI job.
 
-It then runs `bindgen` over `wrapper.h` (which just includes `conversation.h`
-and `engine.h`) to generate the raw bindings, allow-listing the
-`litert_lm_*` functions and `LiteRtLm*` types.
+It then runs `bindgen` over `wrapper.h` (which includes every public header in
+`prebuilt/include/`) to generate the raw bindings, allow-listing the
+`litert_lm_*` functions, `LiteRtLm*` types and `LITERT_LM_*` constants (such as
+`LITERT_LM_C_API_VERSION_MAJOR`).
+
+> [!IMPORTANT]
+> The C API 1.0.0 is ABI-incompatible with 0.x. The headers in
+> `prebuilt/include/` and the library you link must come from the same
+> package. The download fallback (step 3) fetches the 1.0.0 libraries from
+> the `LiteRT-LM-prebuilts` mirror (tag `v0.19.1`) and verifies their SHA-256.
 
 **System requirement:** `bindgen` needs `libclang` available at build time
 (a developer-machine dependency only — it isn't needed by the compiled

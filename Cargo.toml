@@ -6,7 +6,7 @@ members = [
 ]
 
 [workspace.package]
-version       = "0.16.4"
+version       = "0.19.1"
 edition       = "2021"
 license       = "Apache-2.0"
 license-file  = "LICENSE"
@@ -19,8 +19,8 @@ keywords      = ["litert", "litert-lm", "tflite", "ml", "inference"]
 categories    = ["api-bindings", "science"]
 
 [workspace.dependencies]
-litertlm-sys = { version = "0.16.0", path = "litertlm-sys" }
-litertlm-rs  = { version = "0.16.0", path = "litertlm-rs" }
+litertlm-sys = { version = "0.19.1", path = "litertlm-sys" }
+litertlm-rs  = { version = "0.19.1", path = "litertlm-rs" }
 
 bindgen    = "0.70"
 serde_json = "1"

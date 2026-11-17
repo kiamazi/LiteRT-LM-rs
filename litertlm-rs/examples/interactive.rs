@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("backend: {backend}");
 
-    set_min_log_level(LogSeverity::Silent);
+    set_min_log_level(LogSeverity::Silent)?;
 
     eprintln!("Loading model...");
     let settings = EngineSettings::new(&model_path, &backend, None, None)?;

@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // your own program's output shows. Use LogSeverity::Error instead if
     // you still want to see real errors, just not the routine INFO/WARNING
     // noise.
-    set_min_log_level(LogSeverity::Silent);
+    set_min_log_level(LogSeverity::Silent)?;
 
     let settings = EngineSettings::new(&model_path, &backend, None, None)?;
     let engine = Engine::new(&settings)?;

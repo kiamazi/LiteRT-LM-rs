@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Un-silence this (or set to LogSeverity::Error) if you need to see the
     // underlying C++ diagnostic for a `send_message` failure -- the plain
     // "returned NULL" Rust error alone doesn't show the real reason.
-    set_min_log_level(LogSeverity::Silent);
+    set_min_log_level(LogSeverity::Silent)?;
 
     let settings = EngineSettings::new(&model_path, "cpu", None, None)?;
     let engine = Engine::new(&settings)?;

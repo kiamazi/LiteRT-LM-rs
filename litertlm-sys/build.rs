@@ -29,36 +29,36 @@ fn main() {
             "aarch64-unknown-linux-gnu" | "aarch64-linux-gnu" => (
                 "liblitert-lm.so",
                 "lib/linux_arm64",
-                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/linux_arm64_liblitert-lm.so",
-                "1c48e5d711069544156cd8aad61cec561262248f344cbe4ba72d8640efb4f34c",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.19.1/linux_arm64_liblitert-lm.so",
+                "f679d1cc29150a8043bdfe6c1070ae1985a68005d0ef72be4d2504a687ea4617",
                 None,
             ),
             "x86_64-linux-gnu" | "x86_64-unknown-linux-gnu" => (
                 "liblitert-lm.so",
                 "lib/linux_x86_64",
-                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/linux_x86_64_liblitert-lm.so",
-                "34eb4998b1b3a8b049a6fb24c8069933821abb22680f4737b7f29baae233ae35",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.19.1/linux_x86_64_liblitert-lm.so",
+                "1fa0e6a9b194124615a9445aca86f91857445e3a767d200a3d2670ea630d5365",
                 None,
             ),
             "aarch64-linux-android" => (
                 "liblitert-lm.so",
                 "lib/android_arm64",
-                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/android_arm64_liblitert-lm.so",
-                "e9cbdddb0f1c693c549e1cde40bf90ad8aaa124d15944d0dd18faaf016dd6938",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.19.1/android_arm64_liblitert-lm.so",
+                "d000b46697a43bfae6181f280240ddeff08ef25049902f42d54b35c519ec7764",
                 None,
             ),
             "x86_64-linux-android" => (
                 "liblitert-lm.so",
                 "lib/android_x86_64",
-                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/android_x86_64_liblitert-lm.so",
-                "b2976e7d57040617c541c04104cde0fa40f10bea9787fe0d21f949a97a926dff",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.19.1/android_x86_64_liblitert-lm.so",
+                "750ed4218e57f5d73c4baaa107409b28c498f6f2570cdb89cf01c6fa3fefe8b4",
                 None,
             ),
             "aarch64-apple-darwin" => (
                 "liblitert-lm.dylib",
                 "lib/macos_arm64",
-                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/liblitert-lm.dylib",
-                "626a0b40a28405529d2e43ab058b4deac967cb8517cd0c37c103baa3517bee13",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.19.1/liblitert-lm.dylib",
+                "9d0a396985b976b20a42dbbbce63756de1c1b374930ca76a8ff423209ce0c4e8",
                 None,
             ),
             "x86_64-apple-darwin" => panic!(
@@ -69,12 +69,12 @@ fn main() {
             "x86_64-pc-windows-msvc" => (
                 "litert-lm.dll",
                 "lib/windows_x86_64/bin",
-                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/windows_x86_64_litert-lm.dll",
-                "4bb6bc031c5ee1588b504cb6c588b7369a99c1f4874745549abb6d4a9cb153c4",
+                "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.19.1/windows_x86_64_litert-lm.dll",
+                "442e411af57bf6cf36ebf11aba03504a02c6f6fbe405010150f87a877ad12a11",
                 Some((
                     "litert-lm.lib",
-                    "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.16.0/windows_x86_64_litert-lm.lib",
-                    "e630a50dc9923fa03f103a34ebd7eab13ac0479b29c1b8a99bc2f9afac089103",
+                    "https://github.com/kiamazi/LiteRT-LM-prebuilts/releases/download/v0.19.1/windows_x86_64_litert-lm.lib",
+                    "c5bd603ad06ac6eb4b6faa16d0b82690c8e437358e1a113f43b9719c6c85d095",
                 )),
             ),
             "x86_64-pc-windows-gnu" => panic!(
@@ -166,6 +166,16 @@ fn main() {
     println!(
         "cargo:warning=No prebuilt library found, downloading from GitHub"
     );
+    // Never download a binary without a recorded SHA-256 (the values above come
+    // from the mirror release's checksums.json).
+    if expected_checksum.is_empty() {
+        panic!(
+            "No LiteRT-LM C API 1.0.0 library found for target {target}, and the download \
+             fallback has no recorded checksum yet. Put the official prebuilt package's \
+             lib/ directory in litertlm-sys/prebuilt/lib/ or set LITERT_LM_LIB_DIR \
+             (see litertlm-sys/prebuilt/README.md)."
+        );
+    }
     download_file(url, &lib_path);
     verify_checksum(&lib_path, expected_checksum)
         .unwrap_or_else(|e| panic!("Checksum verification failed for library: {}", e));
@@ -212,6 +222,8 @@ fn generate_bindings(manifest_dir: &PathBuf) {
         .derive_debug(true)
         .allowlist_function("litert_lm_.*")
         .allowlist_type("LiteRtLm.*")
+        // C API version macros (LITERT_LM_C_API_VERSION_{MAJOR,MINOR,PATCH}).
+        .allowlist_var("LITERT_LM_.*")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");

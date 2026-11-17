@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("backend: {backend}");
 
-    set_min_log_level(LogSeverity::Silent);
+    set_min_log_level(LogSeverity::Silent)?;
     // set_min_log_level(LogSeverity::Silent);    // No output at all
     // set_min_log_level(LogSeverity::Error);     // Only errors
     // set_min_log_level(LogSeverity::Warning);   // Errors + warnings

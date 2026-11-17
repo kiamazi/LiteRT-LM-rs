@@ -8,7 +8,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-litertlm-rs = "0.16"
+litertlm-rs = "0.19"
 serde_json = "1"  # for building message JSON
 ```
 
@@ -18,7 +18,7 @@ Minimal example:
 use litertlm_rs::{Engine, EngineSettings, LogSeverity};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    litertlm_rs::set_min_log_level(LogSeverity::Silent);
+    litertlm_rs::set_min_log_level(LogSeverity::Silent)?;
 
     let settings = EngineSettings::new("model.litertlm", "cpu", None, None)?;
     let engine = Engine::new(&settings)?;
@@ -41,12 +41,12 @@ Controls C++ library logging verbosity (must be called before Engine::new):
 ```rust
 use litertlm_rs::{set_min_log_level, LogSeverity};
 
-set_min_log_level(LogSeverity::Silent);    // No output at all
-set_min_log_level(LogSeverity::Error);     // Only errors
-set_min_log_level(LogSeverity::Warning);   // Errors + warnings
-set_min_log_level(LogSeverity::Info);      // Errors + warnings + info
-set_min_log_level(LogSeverity::Debug);     // All except verbose
-set_min_log_level(LogSeverity::Verbose);   // Everything
+set_min_log_level(LogSeverity::Silent)?;    // No output at all
+set_min_log_level(LogSeverity::Error)?;     // Only errors
+set_min_log_level(LogSeverity::Warning)?;   // Errors + warnings
+set_min_log_level(LogSeverity::Info)?;      // Errors + warnings + info
+set_min_log_level(LogSeverity::Debug)?;     // All except verbose
+set_min_log_level(LogSeverity::Verbose)?;   // Everything
 ```
 
 ### Error
@@ -54,18 +54,27 @@ set_min_log_level(LogSeverity::Verbose);   // Everything
 All API methods return `Result<T, Error>`:
 
 ```rust
-use litertlm_rs::{Error, Engine, EngineSettings};
+use litertlm_rs::{Engine, EngineSettings, Error, StatusCode};
 
 let settings = EngineSettings::new("model.litertlm", "cpu", None, None)?;
 match Engine::new(&settings) {
     Ok(engine) => println!("Loaded successfully"),
     Err(Error::NulArgument(name)) => eprintln!("NUL byte in argument: {}", name),
-    Err(Error::CreateFailed(what)) => eprintln!("C API returned NULL: {}", what),
-    Err(Error::CallFailed(what)) => eprintln!("C API returned error: {}", what),
+    // Any non-OK C status code, plus the library's own message
+    Err(Error::Status { what, code: StatusCode::NotFound, message }) => {
+        eprintln!("{what}: not found ({message:?})")
+    }
+    Err(Error::IncompatibleLibrary { headers, library }) => {
+        eprintln!("need C API {headers}, library is {library}")
+    }
     Err(Error::Stream(msg)) => eprintln!("Stream error: {}", msg),
-    Err(e) => eprintln!("Unexpected error: {}", e),
+    Err(e) => eprintln!("Unexpected error: {}", e), // Error is #[non_exhaustive]
 }
 ```
+
+Every `Error::Status` carries the C status code **and** the library's
+thread-local error message, captured at the moment of failure. `Error::code()`
+and `Error::is_not_found()` are shortcuts.
 
 ### extract_text (helper function)
 
@@ -194,7 +203,11 @@ let engine = Engine::new(&settings)?;
 | `enable_benchmark`                    | `(&mut self) -> &mut Self`                                                    | Enable benchmark data collection.                                       |
 | `set_num_prefill_tokens`              | `(&mut self, n) -> &mut Self`                                                 | Prefill tokens for benchmarking.                                        |
 | `set_num_decode_tokens`               | `(&mut self, n) -> &mut Self`                                                 | Decode tokens for benchmarking.                                         |
-| `set_enable_speculative_decoding`     | `(&mut self, enable) -> &mut Self`                                            | Enable speculative decoding.                                            |
+| `set_enable_speculative_decoding`     | `(&mut self, enable) -> &mut Self`                                            | **Deprecated.** Use `set_speculative_decoding_config`.                  |
+| `set_speculative_decoding_config`     | `(&mut self, &SpeculativeDecodingConfig) -> &mut Self`                        | Speculative decoding mode (off/on/adaptive).                            |
+| `set_single_threaded_execution`       | `(&mut self, bool) -> &mut Self`                                              | No background work; calls must not overlap engine-wide.                 |
+| `set_max_vision_tokens_per_image`     | `(&mut self, n) -> &mut Self`                                                 | Max vision tokens per image.                                            |
+| `set_gpu_enable_metal_residency_set`  | `(&mut self, bool) -> &mut Self`                                              | Metal residency set (Metal GPU only).                                   |
 | `set_gpu_decode_steps_per_sync`       | `(&mut self, steps) -> &mut Self`                                             | GPU decode sync frequency.                                              |
 | `set_gpu_wait_for_weight_uploads`     | `(&mut self, wait) -> &mut Self`                                              | Wait for GPU weight uploads.                                            |
 | `set_use_ringbuffers_local_attention` | `(&mut self, use_ring) -> &mut Self`                                          | Ringbuffer KV cache (GPU Artisan only).                                 |
@@ -233,8 +246,8 @@ let session = engine.create_session(Some(&session_config))?;
 | `create_conversation_with_config` | `(config: &ConversationConfig) -> Result<Conversation, Error>` — Creates a conversation with custom config.           |
 | `tokenize`                        | `(text: &str) -> Result<TokenizeResult, Error>` — Tokenizes text using the model's tokenizer.                         |
 | `detokenize`                      | `(tokens: &[i32]) -> Result<DetokenizeResult, Error>` — Converts token IDs back to text.                              |
-| `get_start_token`                 | `() -> Option<TokenUnion>` — Returns the BOS (start) token, if configured.                                            |
-| `get_stop_tokens`                 | `() -> Option<TokenUnions>` — Returns the EOS (stop) tokens, if configured.                                           |
+| `get_start_token`                 | `() -> Result<Option<TokenUnion>>` — Returns the BOS (start) token, if configured.                                            |
+| `get_stop_tokens`                 | `() -> Result<Option<TokenUnions>>` — Returns the EOS (stop) tokens, if configured.                                           |
 
 ---
 
@@ -251,7 +264,7 @@ session.run_prefill(&inputs)?;
 
 // 2a. Blocking decode
 let responses = session.run_decode()?;
-println!("{}", responses.response_text_at(0).unwrap_or_default());
+println!("{}", responses.response_text_at(0)?);
 
 // One-shot: prefill + decode in one call
 let responses = session.generate_content(&[InputData::text("What is 2+2?")?])?;
@@ -270,10 +283,11 @@ session.generate_content_stream(
 
 | Method                    | Description                                                                                        |
 | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| `cancel_process`          | `()` — Cancels in-flight processing.                                                               |
-| `save_checkpoint`         | `(label: &str) -> Result<(), Error>` — Saves current session state. v0.16.0+ required.             |
-| `rewind_to_checkpoint`    | `(label: &str) -> Result<(), Error>` — Rewinds to a saved checkpoint. v0.16.0+ required.           |
-| `rewind_to_step`          | `(step: i32) -> Result<(), Error>` — Rewinds to a specific decode step. v0.16.0+ required.         |
+| `cancel_process`          | `() -> Result<()>` — Cancels in-flight processing. The session may only be dropped afterwards.     |
+| `clone_session`           | `() -> Result<Session>` — Copies this session's state into an independent session (C API 1.0.0).   |
+| `save_checkpoint`         | `(label: &str) -> Result<(), Error>` — Saves current session state.             |
+| `rewind_to_checkpoint`    | `(label: &str) -> Result<(), Error>` — Rewinds to a saved checkpoint.           |
+| `rewind_to_step`          | `(step: i32) -> Result<(), Error>` — Rewinds to a specific decode step.         |
 | `run_prefill`             | `(inputs: &[InputData]) -> Result<(), Error>` — Blocking: feeds input for prefill.                 |
 | `run_decode`              | `() -> Result<Responses, Error>` — Blocking: decodes response after prefill.                       |
 | `run_text_scoring`        | `(targets: &[&str], store_lengths: bool) -> Result<Responses, Error>` — Scores target texts.       |
@@ -322,7 +336,7 @@ let clone = convo.clone_conversation()?;
 let tokens = convo.token_count()?;
 
 // Cancel in-flight processing
-convo.cancel_process();
+convo.cancel_process()?; // the conversation may only be dropped afterwards
 ```
 
 | Method                          | Description                                                                                                   |
@@ -334,9 +348,10 @@ convo.cancel_process();
 | `send_message_stream_with_args` | `(message, extra_context, optional_args, on_chunk) -> Result<(), Error>` — Streaming with optional overrides. |
 | `render_message_to_string`      | `(message_json: &str) -> Result<String, Error>` — Renders a message through the prompt template.              |
 | `render_preface_to_string`      | `() -> Result<String, Error>` — Renders the conversation preface (system message, tools, etc.).               |
-| `cancel_process`                | `()` — Cancels in-flight processing.                                                                          |
+| `cancel_process`                | `() -> Result<()>` — Cancels in-flight processing. The conversation may only be dropped afterwards.          |
+| `wait_until_done`               | `() -> Result<()>` — Waits for pending work (driven automatically for single-threaded engines).             |
 | `get_benchmark_info`            | `() -> Result<BenchmarkInfo, Error>` — Retrieves benchmark data.                                              |
-| `token_count`                   | `() -> Result<i32, Error>` — Returns token count in the KV cache.                                             |
+| `token_count`                   | `() -> Result<usize, Error>` — Returns token count in the KV cache.                                             |
 
 ---
 
@@ -575,34 +590,38 @@ Result of `Session::run_decode`, `run_text_scoring`, or `generate_content`:
 let responses = session.run_decode()?;
 
 // Number of candidate responses
-println!("Candidates: {}", responses.num_candidates());
+println!("Candidates: {}", responses.num_candidates()?);
 
-// Text of candidate 0
-println!("Text: {}", responses.response_text_at(0).unwrap_or_default());
+// Text of candidate 0 (errors with OutOfRange / NotFound if absent)
+println!("Text: {}", responses.response_text_at(0)?);
+
+// Or all candidates at once
+let all: Vec<String> = responses.texts()?;
 
 // Score (if available — from text scoring)
-if let Some(score) = responses.score_at(0) {
+if let Some(score) = responses.score_at(0)? {
     println!("Score: {}", score);
 }
 
 // Token count (if available)
-if let Some(len) = responses.token_length_at(0) {
+if let Some(len) = responses.token_length_at(0)? {
     println!("Tokens: {}", len);
 }
 
 // Per-token scores (if available)
-if let Some(scores) = responses.token_scores_at(0) {
+if let Some(scores) = responses.token_scores_at(0)? {
     println!("Per-token scores: {:?}", scores);
 }
 ```
 
-| Method             | Signature                                 | Description                                      |
-| ------------------ | ----------------------------------------- | ------------------------------------------------ |
-| `num_candidates`   | `(&self) -> i32`                          | Returns the number of response candidates.       |
-| `response_text_at` | `(&self, index: i32) -> Option<String>`   | Returns the text of candidate at index.          |
-| `score_at`         | `(&self, index: i32) -> Option<f32>`      | Returns the score for candidate at index.        |
-| `token_length_at`  | `(&self, index: i32) -> Option<i32>`      | Returns the token length for candidate at index. |
-| `token_scores_at`  | `(&self, index: i32) -> Option<Vec<f32>>` | Returns per-token scores for candidate at index. |
+| Method             | Signature                                          | Description                                      |
+| ------------------ | -------------------------------------------------- | ------------------------------------------------ |
+| `num_candidates`   | `(&self) -> Result<usize>`                         | Returns the number of response candidates.       |
+| `response_text_at` | `(&self, index: usize) -> Result<String>`          | Returns the text of candidate at index.          |
+| `texts`            | `(&self) -> Result<Vec<String>>`                   | Text of every candidate, in order.               |
+| `score_at`         | `(&self, index: usize) -> Result<Option<f32>>`     | Returns the score for candidate at index.        |
+| `token_length_at`  | `(&self, index: usize) -> Result<Option<usize>>`   | Returns the token length for candidate at index. |
+| `token_scores_at`  | `(&self, index: usize) -> Result<Option<Vec<f32>>>`| Returns per-token scores for candidate at index. |
 
 ---
 
@@ -622,33 +641,34 @@ let convo = engine.create_conversation()?;
 convo.send_message(r#"{"role":"user","content":"Hello"}"#)?;
 
 let bench = convo.get_benchmark_info()?;
-println!("TTFT: {}s", bench.time_to_first_token());
-println!("Init time: {}s", bench.total_init_time_in_second());
-println!("Prefill turns: {}", bench.num_prefill_turns());
-println!("Decode turns: {}", bench.num_decode_turns());
+println!("TTFT: {}s", bench.time_to_first_token()?);
+println!("Init time: {}s", bench.total_init_time_in_second()?);
+println!("Prefill turns: {}", bench.num_prefill_turns()?);
+println!("Decode turns: {}", bench.num_decode_turns()?);
 
-for i in 0..bench.num_prefill_turns() {
+for i in 0..bench.num_prefill_turns()? {
     println!(
         "  Turn {}: {} prefill tokens ({} tok/s), {} decode tokens ({} tok/s)",
         i,
-        bench.prefill_token_count_at(i),
-        bench.prefill_tokens_per_sec_at(i),
-        bench.decode_token_count_at(i),
-        bench.decode_tokens_per_sec_at(i),
+        bench.prefill_token_count_at(i)?,
+        bench.prefill_tokens_per_sec_at(i)?,
+        bench.decode_token_count_at(i)?,
+        bench.decode_tokens_per_sec_at(i)?,
     );
 }
 ```
 
-| Method                      | Signature                    | Description                                        |
-| --------------------------- | ---------------------------- | -------------------------------------------------- |
-| `time_to_first_token`       | `(&self) -> f64`             | Seconds from prefill start to first decoded token. |
-| `total_init_time_in_second` | `(&self) -> f64`             | Total engine initialization time.                  |
-| `num_prefill_turns`         | `(&self) -> i32`             | Number of prefill turns recorded.                  |
-| `num_decode_turns`          | `(&self) -> i32`             | Number of decode turns recorded.                   |
-| `prefill_token_count_at`    | `(&self, index: i32) -> i32` | Prefill token count for turn at index.             |
-| `decode_token_count_at`     | `(&self, index: i32) -> i32` | Decode token count for turn at index.              |
-| `prefill_tokens_per_sec_at` | `(&self, index: i32) -> f64` | Prefill throughput for turn at index.              |
-| `decode_tokens_per_sec_at`  | `(&self, index: i32) -> f64` | Decode throughput for turn at index.               |
+| Method                      | Signature                              | Description                                        |
+| --------------------------- | -------------------------------------- | -------------------------------------------------- |
+| `time_to_first_token`       | `(&self) -> Result<f64>`               | Seconds from prefill start to first decoded token. |
+| `total_init_time_in_second` | `(&self) -> Result<f64>`               | Total engine initialization time.                  |
+| `num_prefill_turns`         | `(&self) -> Result<usize>`             | Number of prefill turns recorded.                  |
+| `num_decode_turns`          | `(&self) -> Result<usize>`             | Number of decode turns recorded.                   |
+| `prefill_token_count_at`    | `(&self, index: usize) -> Result<usize>` | Prefill token count for turn at index.           |
+| `decode_token_count_at`     | `(&self, index: usize) -> Result<usize>` | Decode token count for turn at index.            |
+| `prefill_tokens_per_sec_at` | `(&self, index: usize) -> Result<f64>` | Prefill throughput for turn at index.              |
+| `decode_tokens_per_sec_at`  | `(&self, index: usize) -> Result<f64>` | Decode throughput for turn at index.               |
+| `max_num_tokens`            | `(&self) -> Result<i32>`               | Maximum number of tokens (new in C API 1.0.0).     |
 
 ---
 
@@ -684,6 +704,21 @@ convo.send_message_stream(
 | `is_final` | `(&self) -> bool`           | Whether this is the last chunk.                 |
 | `error`    | `(&self) -> Option<String>` | Returns the error message if the stream failed. |
 
+Streaming calls block until the final chunk has been delivered. Rules for
+your callback (from the C API's threading model):
+
+- It may run on a library-owned thread, so keep it short.
+- It must **not** call into the engine, or any session/conversation created
+  from it — with one exception: while handling a **non-final** chunk it may
+  call `cancel_process()` on the session/conversation being streamed.
+- After `cancel_process`, that session/conversation can only be dropped;
+  further calls return `Error::UseAfterCancel`.
+- A panic in the callback is caught at the FFI boundary and re-raised on the
+  calling thread once the stream has finished.
+- With `EngineSettings::set_single_threaded_execution(true)`, conversation
+  streams are driven for you (`wait_until_done`, callback runs on the
+  calling thread); `Session` streaming returns `Error::Unsupported`.
+
 ---
 
 ## TokenizeResult
@@ -692,13 +727,13 @@ Result of `Engine::tokenize`:
 
 ```rust
 let result = engine.tokenize("Hello, world!")?;
-let tokens: Vec<i32> = result.tokens();
+let tokens: Vec<i32> = result.tokens()?;
 println!("Tokens: {:?}", tokens);
 ```
 
-| Method   | Signature             | Description                           |
-| -------- | --------------------- | ------------------------------------- |
-| `tokens` | `(&self) -> Vec<i32>` | Returns token IDs as an owned vector. |
+| Method   | Signature                     | Description                           |
+| -------- | ----------------------------- | ------------------------------------- |
+| `tokens` | `(&self) -> Result<Vec<i32>>` | Returns token IDs as an owned vector. |
 
 ---
 
@@ -708,38 +743,42 @@ Result of `Engine::detokenize`:
 
 ```rust
 let result = engine.detokenize(&[1, 1234, 5678, 2])?;
-println!("Text: {}", result.text().unwrap_or_default());
+println!("Text: {}", result.text()?);
 ```
 
 | Method | Signature                   | Description                   |
 | ------ | --------------------------- | ----------------------------- |
-| `text` | `(&self) -> Option<String>` | Returns the detokenized text. |
+| `text` | `(&self) -> Result<String>` | Returns the detokenized text. |
 
 ---
 
-## TokenUnion
+## TokenUnion / TokenUnionRef
 
-Represents a single BOS/EOS token (string or ID sequence):
+A single BOS/EOS token (string or ID sequence). `Engine::get_start_token`
+returns an **owned** `TokenUnion`; `TokenUnions::get` returns a **borrowed**
+`TokenUnionRef<'_>` that cannot outlive its collection (the C API forbids
+deleting those individually, and the borrow checker enforces it).
 
 ```rust
 let engine = Engine::new(&settings)?;
 
-if let Some(bos) = engine.get_start_token() {
-    println!("BOS type: {:?}", bos.union_type());
-    if let Some(s) = bos.as_string() {
+// `Ok(None)` means "no start token configured" (not an error).
+if let Some(bos) = engine.get_start_token()? {
+    println!("BOS type: {:?}", bos.union_type()?);
+    if let Some(s) = bos.as_string()? {
         println!("BOS string: {}", s);
     }
-    if let Some(ids) = bos.as_ids() {
+    if let Some(ids) = bos.as_ids()? {
         println!("BOS ids: {:?}", ids);
     }
 }
 ```
 
-| Method       | Signature                     | Description                              |
-| ------------ | ----------------------------- | ---------------------------------------- |
-| `union_type` | `(&self) -> TokenUnionType`   | Whether this holds a string or IDs.      |
-| `as_string`  | `(&self) -> Option<String>`   | Returns the string value, if applicable. |
-| `as_ids`     | `(&self) -> Option<Vec<i32>>` | Returns token IDs, if applicable.        |
+| Method       | Signature                              | Description                                         |
+| ------------ | -------------------------------------- | --------------------------------------------------- |
+| `union_type` | `(&self) -> Result<TokenUnionType>`    | Whether this holds a string or IDs.                 |
+| `as_string`  | `(&self) -> Result<Option<String>>`    | Returns the string value, if it holds a string.     |
+| `as_ids`     | `(&self) -> Result<Option<Vec<i32>>>`  | Returns token IDs, if it holds IDs.                 |
 
 ---
 
@@ -748,23 +787,158 @@ if let Some(bos) = engine.get_start_token() {
 Collection of token unions (typically stop/EOS tokens):
 
 ```rust
-if let Some(stops) = engine.get_stop_tokens() {
-    println!("Stop tokens: {}", stops.len());
-    for i in 0..stops.len() {
-        if let Some(token) = stops.get(i) {
-            if let Some(s) = token.as_string() {
-                println!("  Stop string: {}", s);
-            }
+if let Some(stops) = engine.get_stop_tokens()? {
+    println!("Stop tokens: {}", stops.len()?);
+    for token in stops.iter()? {
+        if let Some(s) = token?.as_string()? {
+            println!("  Stop string: {}", s);
         }
     }
 }
 ```
 
-| Method     | Signature                                     | Description                       |
-| ---------- | --------------------------------------------- | --------------------------------- |
-| `len`      | `(&self) -> usize`                            | Number of token unions.           |
-| `is_empty` | `(&self) -> bool`                             | Whether there are no tokens.      |
-| `get`      | `(&self, index: usize) -> Option<TokenUnion>` | Returns the token union at index. |
+| Method     | Signature                                              | Description                                   |
+| ---------- | ------------------------------------------------------ | --------------------------------------------- |
+| `len`      | `(&self) -> Result<usize>`                             | Number of token unions.                       |
+| `is_empty` | `(&self) -> Result<bool>`                              | Whether there are no tokens.                  |
+| `get`      | `(&self, index: usize) -> Result<TokenUnionRef<'_>>`   | Borrowed token union at index.                |
+| `iter`     | `(&self) -> Result<impl Iterator<Item = Result<TokenUnionRef<'_>>>>` | Iterates over the collection.   |
+
+---
+
+## SpeculativeDecodingConfig
+
+New in C API 1.0.0. Replaces the deprecated `set_enable_speculative_decoding`
+boolean (still available, marked `#[deprecated]`).
+
+```rust
+use litertlm_rs::{SpeculativeDecodingConfig, SpeculativeDecodingMode};
+
+let cfg = SpeculativeDecodingConfig::with_mode(SpeculativeDecodingMode::Adaptive)?;
+settings.set_speculative_decoding_config(&cfg);      // EngineSettings
+session_config.set_speculative_decoding_config(&cfg); // SessionConfig
+```
+
+Modes: `Off`, `On` (speculate every decode step), `Adaptive` (only while
+measured to be faster than plain decoding).
+
+---
+
+## EmbeddingEngine
+
+Computes embedding vectors with an embedding model (`embedding_engine.h`).
+
+```rust
+use litertlm_rs::*;
+
+let mut settings = EmbeddingEngineSettings::new("embedder.litertlm", "cpu", None, None)?;
+settings.set_num_threads(4).set_max_input_length(512);
+let engine = EmbeddingEngine::new(&settings)?;
+
+let mut opts = EmbeddingOptions::new()?;
+opts.set_normalize(true)
+    .set_input_overflow_strategy(InputOverflowStrategy::ChunkAndAverage);
+
+// One embedding
+let resp = engine.compute_embedding(&[InputData::text("hello world")?], Some(&opts))?;
+let vector: &[f32] = resp.values()?; // borrowed, zero-copy
+
+// A batch: one inner slice of inputs per request
+let a = [InputData::text("first")?];
+let b = [InputData::text("second")?];
+let batch = engine.compute_embedding_batch(&[&a, &b], Some(&opts))?;
+for i in 0..batch.len()? {
+    println!("{} dims", batch.get(i)?.size()?);
+}
+```
+
+| Type                      | Highlights                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `EmbeddingEngineSettings` | `new`, `set_num_threads`, `set_audio_num_threads`, `set_cache_dir`, `set_litert_dispatch_lib_dir`, `set_vision_litert_dispatch_lib_dir`, `set_audio_litert_dispatch_lib_dir`, `set_max_input_length`, `set_min_input_length`, `set_vision_tokens_per_image`, `set_activation_data_type` |
+| `EmbeddingOptions`        | `new`, setters + getters for `normalize`, `insert_special_tokens`, `input_overflow_strategy`, `output_size`, `vision_tokens_per_image` |
+| `EmbeddingEngine`         | `new`, `compute_embedding`, `compute_embedding_batch`                                                        |
+| `EmbeddingResponse`       | `size`, `values` (borrowed `&[f32]`)                                                                         |
+| `EmbeddingResponses`      | `len`, `is_empty`, `get` → borrowed `EmbeddingResponseRef`                                                   |
+
+---
+
+## LoadedFile (model metadata)
+
+Inspect a `.litertlm` file's capabilities without creating an engine
+(`model_info.h`). Properties a model does not define are `Ok(None)`.
+
+```rust
+use litertlm_rs::{LoadedFile, Modality};
+
+let file = LoadedFile::open("model.litertlm")?;
+println!("type:     {:?}", file.model_type()?);
+println!("thinking: {}", file.supports_thinking()?);
+println!("tools:    {}", file.supports_function_calling()?);
+println!("vision:   {}", file.supports_input_modality(Modality::Vision)?);
+println!("context:  {:?}", file.max_context_tokens()?);
+println!("backends: {:?}", file.modality_supported_backends(Modality::Text)?);
+```
+
+Methods: `open`, `has_speculative_decoding_support`, `supports_thinking`,
+`supports_function_calling`, `sampler_type`, `sampler_temperature`,
+`sampler_top_k`, `sampler_top_p`, `supports_input_modality`,
+`max_vision_token_budget`, `max_context_tokens`, `is_dynamic_context`,
+`vision_signature_selection`, `modality_supported_backends`,
+`modality_npu_brand`, `modality_soc_name`, `min_runtime_version`,
+`model_type`, `embedding_dimension`, `embedding_signature_selection`.
+
+---
+
+## experimental
+
+`litertlm_rs::experimental` wraps `experimental.h`. **No stability
+guarantees**: `is_debugger_enabled`, `update_gpu_enable_metal_residency_set`,
+`session_debug_info`, `conversation_session_debug_info`, and
+`SessionDebugInfo::capture_dir`.
+
+---
+
+## Version checking
+
+`api_version()` returns the loaded library's C API version and
+`ApiVersion::HEADERS` the version this crate was built against.
+`EngineSettings::new`, `EmbeddingEngineSettings::new` and `LoadedFile::open`
+call `check_api_version()` automatically (once per process) and fail with
+`Error::IncompatibleLibrary` if the major versions differ or the library's
+minor version is older.
+
+---
+
+## Migrating from 0.16 to 0.19
+
+The 1.0.0 C API is an ABI-breaking release, and the Rust API follows it:
+
+- **Errors:** `Error::CreateFailed` / `Error::CallFailed` are gone. Failures
+  are `Error::Status { what, code, message }` with the C status code and the
+  library's own message. New variants: `Null`, `UnexpectedValue`,
+  `UseAfterCancel`, `Unsupported`, `IncompatibleLibrary` (the enum is
+  `#[non_exhaustive]`).
+- **Getters now return `Result`:** `Responses`, `BenchmarkInfo`,
+  `TokenizeResult::tokens`, `DetokenizeResult::text`, `TokenUnion*`,
+  `TokenUnions::{len, get}`, `Engine::{get_start_token, get_stop_tokens}`
+  (`Result<Option<_>>`, where `Ok(None)` = "not configured").
+- **Indices and counts are `usize`** (they were `i32`), including
+  `Conversation::token_count`.
+- **`set_min_log_level`, `Session::cancel_process` and
+  `Conversation::cancel_process` return `Result<()>`.**
+- **Chainable setters are unchanged** (`&mut Self`).
+- **`TokenUnions::get` is borrowed.** It used to hand out an owned
+  `TokenUnion` that was then deleted — a double free; it is now a
+  `TokenUnionRef<'_>`.
+- **Lifetimes:** sessions and conversations keep their engine alive, so drop
+  order no longer matters.
+- **After `cancel_process`** a session/conversation may only be dropped.
+- **New APIs:** `SpeculativeDecodingConfig`, `Session::clone_session`,
+  `Conversation::wait_until_done`, `set_single_threaded_execution`,
+  `set_max_vision_tokens_per_image`, `set_gpu_enable_metal_residency_set`,
+  `BenchmarkInfo::max_num_tokens`, `EmbeddingEngine`, `LoadedFile`,
+  `experimental`, `api_version`.
+- **Library:** you need the C API **1.0.0** prebuilt (headers *and* lib).
 
 ---
 
@@ -776,7 +950,7 @@ if let Some(stops) = engine.get_stop_tokens() {
 use litertlm_rs::{Engine, EngineSettings, LogSeverity};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    litertlm_rs::set_min_log_level(LogSeverity::Silent);
+    litertlm_rs::set_min_log_level(LogSeverity::Silent)?;
 
     let settings = EngineSettings::new("model.litertlm", "cpu", None, None)?;
     let engine = Engine::new(&settings)?;
